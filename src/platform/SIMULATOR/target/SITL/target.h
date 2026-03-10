@@ -117,8 +117,9 @@
 #undef USE_OSD
 #undef USE_RX_PPM
 #undef USE_RX_PWM
-#undef USE_SERIALRX
-#undef USE_SERIALRX_CRSF
+// DEBUG: Enable SERIALRX and CRSF for simulator
+// #undef USE_SERIALRX
+// #undef USE_SERIALRX_CRSF
 #undef USE_SERIALRX_GHST
 #undef USE_SERIALRX_IBUS
 #undef USE_SERIALRX_SBUS
@@ -133,7 +134,8 @@
 #undef USE_TELEMETRY_MAVLINK
 #undef USE_RESOURCE_MGMT
 #undef USE_CMS
-#undef USE_TELEMETRY_CRSF
+// DEBUG: Enable CRSF telemetry for simulator
+// #undef USE_TELEMETRY_CRSF
 #undef USE_TELEMETRY_GHST
 #undef USE_TELEMETRY_IBUS
 #undef USE_TELEMETRY_JETIEXBUS

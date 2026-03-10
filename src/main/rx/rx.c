@@ -18,6 +18,9 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
+// DEBUG: Include stdio.h BEFORE Betaflight headers
+#include <stdio.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -25,6 +28,14 @@
 #include <string.h>
 
 #include "platform.h"
+
+// DEBUG: Force enable SERIALRX/CRSF for SITL builds AFTER platform.h  
+#ifndef USE_SERIALRX
+#define USE_SERIALRX
+#endif
+#ifndef USE_SERIALRX_CRSF
+#define USE_SERIALRX_CRSF
+#endif
 
 #include "build/build_config.h"
 #include "build/debug.h"
@@ -203,6 +214,7 @@ STATIC_UNIT_TESTED bool isPulseValid(uint16_t pulseDuration)
 #ifdef USE_SERIALRX
 static bool serialRxInit(const rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState)
 {
+    UNUSED(rxConfig);  // DEBUG: May be unused if only some RX protocols enabled
     bool enabled = false;
     switch (rxRuntimeState->serialrxProvider) {
 #ifdef USE_SERIALRX_SRXL2
@@ -330,7 +342,6 @@ void rxInit(void)
 
     switch (rxRuntimeState.rxProvider) {
     default:
-
         break;
 #ifdef USE_SERIALRX
     case RX_PROVIDER_SERIAL:

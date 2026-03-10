@@ -65,3 +65,6 @@ eeprom.bin
 .claude
 AGENTS.md
 CLAUDE.md
+
+# SITL build artifact
+libbetaflight.a
