@@ -446,6 +446,12 @@ uint32_t micros(void)
     return micros64() & 0xFFFFFFFF;
 }
 
+// ISR-safe version of micros (for SITL, same as regular micros)
+uint32_t microsISR(void)
+{
+    return micros();
+}
+
 uint32_t millis(void)
 {
     return millis64() & 0xFFFFFFFF;

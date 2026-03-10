@@ -18,12 +18,20 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
+// DEBUG: Include stdio.h BEFORE Betaflight headers to avoid poisoned sprintf/snprintf
+#include <stdio.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "platform.h"
+
+// DEBUG: Force enable CRSF for SITL builds AFTER platform.h (which might undef it)
+#ifndef USE_SERIALRX_CRSF
+#define USE_SERIALRX_CRSF
+#endif
 
 #ifdef USE_SERIALRX_CRSF
 
@@ -353,6 +361,7 @@ STATIC_UNIT_TESTED void crsfDataReceive(uint16_t c, void *data)
     static uint8_t crsfFrameErrorCnt = 0;
 #endif
     const timeUs_t currentTimeUs = microsISR();
+    
 
 #ifdef DEBUG_CRSF_PACKETS
     debug[2] = currentTimeUs - crsfFrameStartAtUs;
@@ -392,8 +401,10 @@ STATIC_UNIT_TESTED void crsfDataReceive(uint16_t c, void *data)
                 case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
                     if (crsfFrame.frame.deviceAddress == CRSF_ADDRESS_FLIGHT_CONTROLLER) {
                         rxRuntimeState->lastRcFrameTimeUs = currentTimeUs;
-                        crsfFrameDone = true;
+                        // IMPORTANT: Copy frame data BEFORE setting flag to avoid race condition
+                        // where crsfFrameStatus() could see flag=true but read stale data
                         memcpy(&crsfChannelDataFrame, &crsfFrame, sizeof(crsfFrame));
+                           crsfFrameDone = true;
                     }
                     break;
 
@@ -496,7 +507,7 @@ STATIC_UNIT_TESTED uint8_t crsfFrameStatus(rxRuntimeState_t *rxRuntimeState)
             crsfChannelData[0] = rcChannels->chan0;
             crsfChannelData[1] = rcChannels->chan1;
             crsfChannelData[2] = rcChannels->chan2;
-            crsfChannelData[3] = rcChannels->chan3;
+                 crsfChannelData[3] = rcChannels->chan3;
             crsfChannelData[4] = rcChannels->chan4;
             crsfChannelData[5] = rcChannels->chan5;
             crsfChannelData[6] = rcChannels->chan6;
