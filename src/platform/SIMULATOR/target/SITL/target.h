@@ -109,6 +109,14 @@
 #define USE_BLACKBOX
 #define USE_BLACKBOX_VIRTUAL
 
+// Enable SERIALRX and telemetry for erector simulator integration.
+// common_pre.h skips all feature definitions when SITL is defined,
+// so we must explicitly define the features we need here.
+#define USE_SERIALRX
+#define USE_SERIALRX_CRSF
+#define USE_TELEMETRY
+#define USE_TELEMETRY_CRSF
+
 #undef USE_STACK_CHECK // I think SITL don't need this
 #undef USE_DASHBOARD
 #undef USE_TELEMETRY_LTM
@@ -117,9 +125,6 @@
 #undef USE_OSD
 #undef USE_RX_PPM
 #undef USE_RX_PWM
-// DEBUG: Enable SERIALRX and CRSF for simulator
-// #undef USE_SERIALRX
-// #undef USE_SERIALRX_CRSF
 #undef USE_SERIALRX_GHST
 #undef USE_SERIALRX_IBUS
 #undef USE_SERIALRX_SBUS
@@ -134,8 +139,6 @@
 #undef USE_TELEMETRY_MAVLINK
 #undef USE_RESOURCE_MGMT
 #undef USE_CMS
-// DEBUG: Enable CRSF telemetry for simulator
-// #undef USE_TELEMETRY_CRSF
 #undef USE_TELEMETRY_GHST
 #undef USE_TELEMETRY_IBUS
 #undef USE_TELEMETRY_JETIEXBUS
