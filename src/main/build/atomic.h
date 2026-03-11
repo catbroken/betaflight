@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 
-#if !defined(UNIT_TEST)
+#if !defined(UNIT_TEST) && !defined(SITL)
 // BASEPRI manipulation functions
 // only set_BASEPRI is implemented in device library. It does always create memory barrier
 // missing versions are implemented here
@@ -41,7 +41,7 @@ __attribute__( ( always_inline ) ) static inline void __set_BASEPRI_MAX_nb(uint3
 
 #endif
 
-#if defined(UNIT_TEST)
+#if defined(UNIT_TEST) || defined(SITL)
 // atomic related functions for unittest.
 
 extern uint8_t atomic_BASEPRI;
@@ -83,7 +83,7 @@ static inline uint8_t __basepriSetRetVal(uint8_t prio)
     return 1;
 }
 
-#else
+#else // !UNIT_TEST && !SITL
 // ARM BASEPRI manipulation
 
 // restore BASEPRI (called as cleanup function), with global memory barrier

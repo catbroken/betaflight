@@ -41,3 +41,6 @@
 #define GYRO_COUNT 1 // 1 Gyro
 
 typedef void* ADC_TypeDef; // Dummy definition for ADC_TypeDef
+
+// ARM NVIC priority group constant (not available on x86, used by ATOMIC_BLOCK)
+#define NVIC_PriorityGroup_2 0x500

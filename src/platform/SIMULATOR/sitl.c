@@ -28,6 +28,9 @@
 #include <errno.h>
 #include <time.h>
 
+// Mock BASEPRI for SITL (no ARM priority registers on x86)
+uint8_t atomic_BASEPRI = 0;
+
 #include "common/maths.h"
 
 #include "build/debug.h"
