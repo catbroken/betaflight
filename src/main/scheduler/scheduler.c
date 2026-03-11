@@ -28,6 +28,9 @@
 
 #include "platform.h"
 
+// External virtual clock pointer from sitl.c — when non-NULL, skip busy-wait loops
+extern volatile uint64_t *virtualClockPtr;
+
 #include "drivers/accgyro/accgyro.h"
 
 #include "build/build_config.h"
@@ -545,14 +548,16 @@ FAST_CODE void scheduler(void)
                 schedLoopStartCycles -= schedLoopStartDeltaDownCycles;
             }
 #if !defined(UNIT_TEST)
-            while (schedLoopRemainingCycles > 0) {
-                nowCycles = getCycleCounter();
-                schedLoopRemainingCycles = cmpTimeCycles(nextTargetCycles, nowCycles);
+            if (!virtualClockPtr) {
+                while (schedLoopRemainingCycles > 0) {
+                    nowCycles = getCycleCounter();
+                    schedLoopRemainingCycles = cmpTimeCycles(nextTargetCycles, nowCycles);
+                }
             }
 #endif
             currentTimeUs = micros();
             taskExecutionTimeUs += schedulerExecuteTask(gyroTask, currentTimeUs);
-
+        } else {
             if (gyroFilterReady()) {
                 taskExecutionTimeUs += schedulerExecuteTask(getTask(TASK_FILTER), currentTimeUs);
             }
