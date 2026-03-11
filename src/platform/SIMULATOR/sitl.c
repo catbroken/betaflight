@@ -399,6 +399,16 @@ void indicateFailure(failureMode_e mode, int repeatCount)
 
 // Time part
 // Thanks ArduPilot
+
+// External virtual clock support: when set, all time functions
+// return values based on this pointer instead of the wall clock.
+volatile uint64_t *virtualClockPtr = NULL;
+
+void bf_mock_set_clock_source(uint64_t *ptr)
+{
+    virtualClockPtr = ptr;
+}
+
 uint64_t nanos64_real(void)
 {
     struct timespec ts;
@@ -422,6 +432,9 @@ uint64_t millis64_real(void)
 
 uint64_t micros64(void)
 {
+    if (virtualClockPtr) {
+        return *virtualClockPtr;
+    }
     static uint64_t last = 0;
     static uint64_t out = 0;
     uint64_t now = nanos64_real();
@@ -434,6 +447,9 @@ uint64_t micros64(void)
 
 uint64_t millis64(void)
 {
+    if (virtualClockPtr) {
+        return *virtualClockPtr / 1000;
+    }
     static uint64_t last = 0;
     static uint64_t out = 0;
     uint64_t now = nanos64_real();
@@ -495,6 +511,7 @@ static void microsleep(uint32_t usec)
 
 void delayMicroseconds(uint32_t us)
 {
+    if (virtualClockPtr) return;  // No-op with virtual clock
     microsleep(us / simRate);
 }
 
@@ -505,6 +522,7 @@ void delayMicroseconds_real(uint32_t us)
 
 void delay(uint32_t ms)
 {
+    if (virtualClockPtr) return;  // No-op with virtual clock
     uint64_t start = millis64();
 
     while ((millis64() - start) < ms) {
