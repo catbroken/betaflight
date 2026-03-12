@@ -37,6 +37,7 @@
 
 #include "drivers/accgyro/accgyro.h"
 #include "drivers/accgyro/accgyro_virtual.h"
+#include "drivers/system.h"
 
 static int16_t virtualGyroADC[XYZ_AXIS_COUNT];
 gyroDev_t *virtualGyroDev;
@@ -44,6 +45,12 @@ gyroDev_t *virtualGyroDev;
 static void virtualGyroInit(gyroDev_t *gyro)
 {
     virtualGyroDev = gyro;
+    // The simulator injects complete gyro samples directly, so model the
+    // virtual device as an interrupt-driven gyro for scheduler lock purposes.
+    gyro->gyroModeSPI = GYRO_EXTI_INT;
+    gyro->detectedEXTI = 0;
+    gyro->gyroLastEXTI = 0;
+    gyro->gyroSyncEXTI = 0;
 #if defined(SIMULATOR_BUILD) && defined(SIMULATOR_MULTITHREAD)
     if (pthread_mutex_init(&gyro->lock, NULL) != 0) {
         printf("Create gyro lock error!\n");
@@ -55,10 +62,17 @@ void virtualGyroSet(gyroDev_t *gyro, int16_t x, int16_t y, int16_t z)
 {
     gyroDevLock(gyro);
 
+    const uint32_t nowCycles = getCycleCounter();
+
     virtualGyroADC[X] = x;
     virtualGyroADC[Y] = y;
     virtualGyroADC[Z] = z;
 
+    // Synthesize the EXTI metadata that the scheduler uses to lock its gyro
+    // target time to incoming samples on real hardware.
+    gyro->gyroSyncEXTI = nowCycles;
+    gyro->gyroLastEXTI = nowCycles;
+    gyro->detectedEXTI++;
     gyro->dataReady = true;
 
     gyroDevUnLock(gyro);
