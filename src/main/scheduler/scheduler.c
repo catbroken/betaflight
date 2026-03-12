@@ -519,12 +519,28 @@ FAST_CODE void scheduler(void)
     if (gyroEnabled) {
         // Realtime gyro/filtering/PID tasks get complete priority
         task_t *gyroTask = getTask(TASK_GYRO);
+        gyroDev_t *gyro = gyroActiveDev();
+        bool virtualGyroReady = false;
         nowCycles = getCycleCounter();
 #if defined(UNIT_TEST)
         lastTargetCycles = clockMicrosToCycles(gyroTask->lastExecutedAtUs);
 #endif
         nextTargetCycles = lastTargetCycles + desiredPeriodCycles;
         schedLoopRemainingCycles = cmpTimeCycles(nextTargetCycles, nowCycles);
+
+    #if !defined(UNIT_TEST)
+        if (virtualClockPtr && gyro && gyro->dataReady) {
+            virtualGyroReady = true;
+            // Under simulator virtual time, new gyro samples arrive in
+            // lockstep from the orchestrator rather than via hardware EXTI.
+            // Re-anchor the gyro target to the advertised sample time so the
+            // scheduler can execute the realtime task once per injected sample
+            // instead of racing its target ahead between injections.
+            nextTargetCycles = gyro->gyroSyncEXTI;
+            lastTargetCycles = nextTargetCycles - desiredPeriodCycles;
+            schedLoopRemainingCycles = cmpTimeCycles(nextTargetCycles, nowCycles);
+        }
+    #endif
 
         if (schedLoopRemainingCycles < -desiredPeriodCycles) {
             /* A task has so grossly overrun that at entire gyro cycle has been skipped
@@ -543,7 +559,7 @@ FAST_CODE void scheduler(void)
         }
 
         // Once close to the timing boundary, poll for it's arrival
-        if (schedLoopRemainingCycles < schedLoopStartCycles) {
+        if ((schedLoopRemainingCycles < schedLoopStartCycles) && (!virtualClockPtr || virtualGyroReady)) {
             if (schedLoopStartCycles > schedLoopStartMinCycles) {
                 schedLoopStartCycles -= schedLoopStartDeltaDownCycles;
             }
@@ -558,6 +574,7 @@ FAST_CODE void scheduler(void)
             currentTimeUs = micros();
             taskExecutionTimeUs += schedulerExecuteTask(gyroTask, currentTimeUs);
         } else {
+            currentTimeUs = micros();
             if (gyroFilterReady()) {
                 taskExecutionTimeUs += schedulerExecuteTask(getTask(TASK_FILTER), currentTimeUs);
             }
@@ -622,8 +639,6 @@ FAST_CODE void scheduler(void)
             }
 #endif
             lastTargetCycles = nextTargetCycles;
-
-            gyroDev_t *gyro = gyroActiveDev();
 
             // Bring the scheduler into lock with the gyro
             if (gyro->gyroModeSPI != GYRO_EXTI_NO_INT) {
