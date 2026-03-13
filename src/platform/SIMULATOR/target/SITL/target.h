@@ -44,9 +44,8 @@
 #define DMA_DATA
 #define STATIC_DMA_DATA_AUTO
 
-// use simulatior's attitude directly
-// disable this if wants to test AHRS algorithm
-#undef USE_IMU_CALC
+// Keep IMU attitude calculation enabled so simulator arming and attitude gating
+// follow the injected gyro/accelerometer path instead of a direct attitude feed.
 
 //#define SIMULATOR_ACC_SYNC
 //#define SIMULATOR_GYRO_SYNC
