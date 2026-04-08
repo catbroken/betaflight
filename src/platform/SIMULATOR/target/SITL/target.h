@@ -108,13 +108,14 @@
 #define USE_BLACKBOX
 #define USE_BLACKBOX_VIRTUAL
 
-// Enable SERIALRX and telemetry for erector simulator integration.
-// common_pre.h skips all feature definitions when SITL is defined,
-// so we must explicitly define the features we need here.
+// Enable SERIALRX, telemetry, and altitude-hold for erector simulator
+// integration.  common_pre.h skips all feature definitions when SITL is
+// defined, so we must explicitly define the features we need here.
 #define USE_SERIALRX
 #define USE_SERIALRX_CRSF
 #define USE_TELEMETRY
 #define USE_TELEMETRY_CRSF
+#define USE_ALTITUDE_HOLD
 
 #undef USE_STACK_CHECK // I think SITL don't need this
 #undef USE_DASHBOARD
