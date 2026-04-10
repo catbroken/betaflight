@@ -116,6 +116,9 @@
 #define USE_TELEMETRY
 #define USE_TELEMETRY_CRSF
 #define USE_ALTITUDE_HOLD
+#define USE_GPS
+#define USE_GPS_UBLOX
+#define USE_GPS_RESCUE
 
 #undef USE_STACK_CHECK // I think SITL don't need this
 #undef USE_DASHBOARD
