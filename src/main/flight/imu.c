@@ -128,6 +128,20 @@ PG_RESET_TEMPLATE(imuConfig_t, imuConfig,
     .mag_declination = 0,
 );
 
+// --- Sim instrumentation: observable Mahony filter state ---
+volatile float imu_diag_dt = 0.0f;
+volatile float imu_diag_acc_mag = 0.0f;
+volatile uint8_t imu_diag_use_acc = 0;
+volatile uint32_t imu_diag_update_count = 0;
+volatile float imu_diag_err_pitch = 0.0f;  // Y-component of accel cross product error
+volatile float imu_diag_kp_applied = 0.0f;
+volatile float imu_diag_acc_x = 0.0f;  // normalized accel X seen by Mahony
+volatile float imu_diag_acc_z = 0.0f;  // normalized accel Z seen by Mahony
+volatile float imu_diag_est_x = 0.0f;  // rMat[2][0] estimated down X
+volatile float imu_diag_est_z = 0.0f;  // rMat[2][2] estimated down Z
+volatile float imu_diag_gyro_y = 0.0f; // gyro Y input to Mahony (deg/s)
+// --- End sim instrumentation ---
+
 static void imuQuaternionComputeProducts(quaternion_t *quat, quaternionProducts *quatProd)
 {
     quatProd->ww = quat->w * quat->w;
@@ -245,6 +259,12 @@ STATIC_UNIT_TESTED void imuMahonyAHRSupdate(float dt,
         ex += (ay * rMat.m[2][2] - az * rMat.m[2][1]);
         ey += (az * rMat.m[2][0] - ax * rMat.m[2][2]);
         ez += (ax * rMat.m[2][1] - ay * rMat.m[2][0]);
+
+        imu_diag_err_pitch = ey;  // sim instrumentation
+        imu_diag_acc_x = ax;
+        imu_diag_acc_z = az;
+        imu_diag_est_x = rMat.m[2][0];
+        imu_diag_est_z = rMat.m[2][2];
     }
 
     // Compute and apply integral feedback if enabled
@@ -713,6 +733,16 @@ static void imuCalculateEstimatedAttitude(timeUs_t currentTimeUs)
     }
 
     const bool useAcc = imuIsAccelerometerHealthy(); // all smoothed accADC values are within 10% of 1G
+
+    // --- Sim instrumentation ---
+    imu_diag_dt = dt;
+    imu_diag_acc_mag = acc.accMagnitude;
+    imu_diag_use_acc = useAcc ? 1 : 0;
+    imu_diag_kp_applied = imuCalcKpGain(currentTimeUs, useAcc, gyroAverage);
+    imu_diag_gyro_y = gyroAverage[Y];
+    imu_diag_update_count++;
+    // --- End sim instrumentation ---
+
     imuMahonyAHRSupdate(dt,
                         DEGREES_TO_RADIANS(gyroAverage[X]), DEGREES_TO_RADIANS(gyroAverage[Y]), DEGREES_TO_RADIANS(gyroAverage[Z]),
                         useAcc, acc.accADC.x, acc.accADC.y, acc.accADC.z,
