@@ -12,7 +12,8 @@ INCLUDE_DIRS := \
 MCU_COMMON_SRC  := \
         $(LIB_MAIN_DIR)/dyad/dyad.c \
         SIMULATOR/sitl.c \
-        SIMULATOR/udplink.c
+        SIMULATOR/udplink.c \
+        SIMULATOR/dshot_sim.c
 
 #Flags
 ARCH_FLAGS      =

@@ -166,6 +166,13 @@ bool virtualAccDetect(accDev_t *acc)
     acc->initFn = virtualAccInit;
     acc->readFn = virtualAccRead;
     acc->revisionCode = 0;
+    // Match real P1SUN hardware: ICM-42688P at 16g full-scale uses
+    // acc_1G = 2048 (see accgyro_spi_icm456xx.c). The default of 256 from
+    // acceleration_init.c would cause MSP_RAW_IMU to emit accel at 1/8 the
+    // LSB-per-g the modem firmware expects (apex_task kAccScale=1/2048),
+    // making sim-injected specific force show up as ~0.125 g at the CA.
+    // SIM_ACC_SCALE in libs/sim/bf_wrapper.cpp must stay paired with this.
+    acc->acc_1G = 2048;
     return true;
 }
 #endif // USE_VIRTUAL_ACC

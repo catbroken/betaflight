@@ -40,6 +40,15 @@
 #define USE_MAIN_ARGS
 #define GYRO_COUNT 1 // 1 Gyro
 
+// Enable DSHOT telemetry + RPM filter + dynamic notch for realistic gyro
+// filtering.  In the simulator, motor RPM is injected from physics state
+// into dshotTelemetryState so BF's RPM notch filter tracks motor harmonics
+// — matching what real hardware does with bidirectional DSHOT.
+#define USE_DSHOT
+#define USE_DSHOT_TELEMETRY
+#define USE_RPM_FILTER
+#define USE_DYN_NOTCH_FILTER
+
 typedef void* ADC_TypeDef; // Dummy definition for ADC_TypeDef
 
 // ARM NVIC priority group constant (not available on x86, used by ATOMIC_BLOCK)
