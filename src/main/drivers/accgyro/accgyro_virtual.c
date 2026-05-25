@@ -124,6 +124,13 @@ accDev_t *virtualAccDev;
 static void virtualAccInit(accDev_t *acc)
 {
     virtualAccDev = acc;
+    // Set acc_1G here (in initFn), not in detectFn.  acceleration_init.c
+    // overwrites acc_1G = 256 AFTER accDetect() returns but BEFORE calling
+    // initFn().  Real hardware drivers (icm426xxAccInit) follow the same
+    // pattern: set acc_1G inside initFn so it takes effect after the default.
+    // 2048 = ICM-42688P at 16g full-scale (real P1SUN hardware).
+    // Must stay paired with SIM_ACC_SCALE in libs/sim/bf_wrapper.cpp.
+    acc->acc_1G = 2048;
 #if defined(SIMULATOR_BUILD) && defined(SIMULATOR_MULTITHREAD)
     if (pthread_mutex_init(&acc->lock, NULL) != 0) {
         printf("Create acc lock error!\n");
@@ -166,13 +173,9 @@ bool virtualAccDetect(accDev_t *acc)
     acc->initFn = virtualAccInit;
     acc->readFn = virtualAccRead;
     acc->revisionCode = 0;
-    // Match real P1SUN hardware: ICM-42688P at 16g full-scale uses
-    // acc_1G = 2048 (see accgyro_spi_icm456xx.c). The default of 256 from
-    // acceleration_init.c would cause MSP_RAW_IMU to emit accel at 1/8 the
-    // LSB-per-g the modem firmware expects (apex_task kAccScale=1/2048),
-    // making sim-injected specific force show up as ~0.125 g at the CA.
-    // SIM_ACC_SCALE in libs/sim/bf_wrapper.cpp must stay paired with this.
-    acc->acc_1G = 2048;
+    // NOTE: acc_1G is set in virtualAccInit (the initFn), not here.
+    // acceleration_init.c overwrites acc_1G = 256 after accDetect() returns
+    // but before calling initFn(). Setting it here has no effect.
     return true;
 }
 #endif // USE_VIRTUAL_ACC
