@@ -120,12 +120,19 @@
 #define USE_GPS_UBLOX
 #define USE_GPS_RESCUE
 
+// OSD via displayport for erector sim — renders natively in BF and
+// forwards draw calls to sine.vis via MspDisplayPortSender.
+#define USE_OSD
+#define USE_OSD_SD
+#define USE_OSD_HD
+#define USE_OSD_PROFILES
+#define USE_MSP_DISPLAYPORT
+
 #undef USE_STACK_CHECK // I think SITL don't need this
 #undef USE_DASHBOARD
 #undef USE_TELEMETRY_LTM
 #undef USE_ADC
 #undef USE_VCP
-#undef USE_OSD
 #undef USE_RX_PPM
 #undef USE_RX_PWM
 #undef USE_SERIALRX_GHST

@@ -48,6 +48,14 @@
 
 #include "voltage.h"
 
+// Sim-injectable battery voltage (0.01V units). Used when USE_ADC is not defined.
+static uint16_t simVoltageVbat = 0;
+
+void voltageMeterSimSetVoltage(uint16_t voltageCentivolts)
+{
+    simVoltageVbat = voltageCentivolts;
+}
+
 const char * const voltageMeterSourceNames[VOLTAGE_METER_COUNT] = {
     "NONE", "ADC", "ESC"
 };
@@ -192,10 +200,11 @@ void voltageMeterADCRefresh(void)
         UNUSED(voltageAdcToVoltage);
         UNUSED(voltageMeterAdcChannelMap);
 
-        state->voltageDisplayFiltered = 0;
-        state->voltageUnfiltered = 0;
+        // In sim (no ADC hardware), use injected voltage if set
+        state->voltageDisplayFiltered = simVoltageVbat;
+        state->voltageUnfiltered = simVoltageVbat;
 #if defined(USE_BATTERY_VOLTAGE_SAG_COMPENSATION)
-        state->voltageSagFiltered = 0;
+        state->voltageSagFiltered = simVoltageVbat;
 #endif
 #endif
     }

@@ -125,6 +125,9 @@ void voltageMeterESCReadMotor(uint8_t motor, voltageMeter_t *voltageMeter);
 void voltageStableUpdate(voltageMeter_t* vm);
 bool voltageIsStable(voltageMeter_t* vm);
 
+// Sim-injectable voltage for builds without ADC hardware (SITL)
+void voltageMeterSimSetVoltage(uint16_t voltageCentivolts);
+
 //
 // API for reading/configuring current meters by id.
 //
