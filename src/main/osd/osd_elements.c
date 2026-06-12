@@ -2139,7 +2139,11 @@ void osdAddActiveElements(void)
     }
 
 #ifdef USE_GPS
-    if (sensors(SENSOR_GPS)) {
+    // SIM: also activate on FEATURE_GPS alone. The sim feeds gpsSol directly
+    // (bf_inject_gps) without setting SENSOR_GPS, deliberately keeping the
+    // IMU CoG-yaw and GPS-altitude fusion paths disabled to match the
+    // GPS-less real aircraft. Inert on real hardware (FEATURE_GPS off there).
+    if (sensors(SENSOR_GPS) || featureIsEnabled(FEATURE_GPS)) {
         osdAddActiveElement(OSD_GPS_SATS);
         osdAddActiveElement(OSD_GPS_SPEED);
         osdAddActiveElement(OSD_GPS_LAT);
