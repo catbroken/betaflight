@@ -312,6 +312,20 @@ float getDshotRpm(uint8_t motorIndex)
     return dshotRpm[motorIndex];
 }
 
+#if defined(SIMULATOR_BUILD) || defined(SITL)
+// SITL fidelity hook: the simulator has no real bidir-DShot line to decode, so
+// the plant's true motor RPM is injected here (via bf_wrapper::bf_inject_motor_rpm).
+// Writes the same dshotRpm[] that getDshotRpm()/MSP_MOTOR_TELEMETRY read, so the
+// sim BF reports motor RPM over MSP exactly as a real bidir-DShot ESC would —
+// making the MSP_MOTOR_TELEMETRY path testable in lockstep/HITL.
+void dshotSimSetRpm(uint8_t motorIndex, float rpm)
+{
+    if (motorIndex < MAX_SUPPORTED_MOTORS) {
+        dshotRpm[motorIndex] = rpm;
+    }
+}
+#endif
+
 float getDshotRpmAverage(void)
 {
     return dshotRpmAverage;

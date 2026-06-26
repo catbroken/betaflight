@@ -142,6 +142,9 @@ bool isDshotBitbangActive(const motorDevConfig_t *motorDevConfig);
 uint16_t getDshotErpm(uint8_t motorIndex);
 float getDshotRpm(uint8_t motorIndex);
 float getDshotRpmAverage(void);
+#if defined(SIMULATOR_BUILD) || defined(SITL)
+void dshotSimSetRpm(uint8_t motorIndex, float rpm);  // SITL: inject plant RPM into dshotRpm[]
+#endif
 float getMotorFrequencyHz(uint8_t motorIndex);
 float getMinMotorFrequencyHz(void);
 
