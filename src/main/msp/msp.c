@@ -1145,7 +1145,27 @@ static bool mspProcessOutCommand(mspDescriptor_t srcDesc, int16_t cmdMSP, sbuf_t
     case MSP_RAW_IMU: {
         for (int i = 0; i < 3; i++) {
 #if defined(USE_ACC)
-            sbufWriteU16(dst, lrintf(acc.accADC.v[i]));
+            float accADC_i = acc.accADC.v[i];
+#ifdef SIMULATOR_BUILD
+            // FRAME REFACTOR PHASE B EMISSION CORRECTION (2026-07-21, campaign
+            // 07-20z11): Phase B flipped the accel injection to the proper
+            // rotation Rx(pi) (so BF's INTERNAL attitude is truth-frame), which
+            // also flips the sign of BF-body-Y accel on the wire. The CA
+            // consumes wire index [1] (BF body Y) as its acc_y = -sin(phi)cos(theta),
+            // a convention that is camera-anchored AND run-proven as what the
+            // REAL modem consumes (2026-07-17 retraction control-flight
+            // ~100% sign-agree). Negate wire Y here to KEEP that convention
+            // invariant across the basis change -- the ONE emission correction
+            // Phase B retains (it models a real-chain accel-Y relation whose
+            // physical location, FC vs blackbox, is bench-pinned per
+            // frame-contract.md section 7). Gate-asserted: frame_gate_test B8.
+            // 2026-07-21: the wire accel-Y negate was REMOVED (was a sim-only
+            // compensation for the CA's lateral-Y sign, now applied at the single
+            // canonical CaTilt-input boundary in control_appliance.cpp instead).
+            // Sim now emits BF-body accel-Y exactly as a real FC does.
+            (void)accADC_i;
+#endif
+            sbufWriteU16(dst, lrintf(accADC_i));
 #else
             sbufWriteU16(dst, 0);
 #endif
@@ -1328,11 +1348,22 @@ case MSP_NAME:
 
     case MSP_ATTITUDE_QUATERNION: {
         const float q_scale = 0x7FFF;
+        // FRAME REFACTOR PHASE B (2026-07-21, campaign 07-20z11): the sim BF's
+        // internal attitude is now TRUTH-frame (accel + gyro share the one
+        // proper rotation Rx(pi) at injection -- orchestrator/realtime_sim), so
+        // the wire quat is real-frame with NO correction, exactly like a real
+        // FC. The interim 07-20z8 xz-negate (which compensated the old
+        // injection-mirror) is DELETED, along with its imuAttitudeOverrideActive
+        // gating. See docs/reference/frame-contract.md.
+        float qw = imuAttitudeQuaternion.w;
+        float qx = imuAttitudeQuaternion.x;
+        float qy = imuAttitudeQuaternion.y;
+        float qz = imuAttitudeQuaternion.z;
         // Create temporary int16_t variables
-        int16_t w = lrintf(imuAttitudeQuaternion.w * q_scale);
-        int16_t x = lrintf(imuAttitudeQuaternion.x * q_scale);
-        int16_t y = lrintf(imuAttitudeQuaternion.y * q_scale);
-        int16_t z = lrintf(imuAttitudeQuaternion.z * q_scale); 
+        int16_t w = lrintf(qw * q_scale);
+        int16_t x = lrintf(qx * q_scale);
+        int16_t y = lrintf(qy * q_scale);
+        int16_t z = lrintf(qz * q_scale);
         // Write their bit representation as uint16_t
         sbufWriteU16(dst, *(uint16_t*)&w);
         sbufWriteU16(dst, *(uint16_t*)&x);

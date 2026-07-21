@@ -83,6 +83,9 @@ void imuUpdateAttitude(timeUs_t currentTimeUs);
 void imuInit(void);
 
 #ifdef SIMULATOR_BUILD
+// (imuAttitudeOverrideActive deleted 2026-07-21, frame refactor Phase B: BF's
+// internal attitude is now truth-frame in every mode, so the quat emission
+// correction it gated is gone. See imu.c + docs/reference/frame-contract.md.)
 void imuSetAttitudeRPY(float roll, float pitch, float yaw);  // in deg
 void imuSetAttitudeQuat(float w, float x, float y, float z);
 #if defined(SIMULATOR_IMU_SYNC)

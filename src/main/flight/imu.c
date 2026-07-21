@@ -140,6 +140,9 @@ volatile float imu_diag_acc_z = 0.0f;  // normalized accel Z seen by Mahony
 volatile float imu_diag_est_x = 0.0f;  // rMat[2][0] estimated down X
 volatile float imu_diag_est_z = 0.0f;  // rMat[2][2] estimated down Z
 volatile float imu_diag_gyro_y = 0.0f; // gyro Y input to Mahony (deg/s)
+volatile float imu_diag_err_roll = 0.0f;  // X-component of accel cross product error (roll plane)
+volatile float imu_diag_acc_y = 0.0f;  // normalized accel Y seen by Mahony
+volatile float imu_diag_est_y = 0.0f;  // rMat[2][1] estimated down Y
 // --- End sim instrumentation ---
 
 static void imuQuaternionComputeProducts(quaternion_t *quat, quaternionProducts *quatProd)
@@ -265,6 +268,9 @@ STATIC_UNIT_TESTED void imuMahonyAHRSupdate(float dt,
         imu_diag_acc_z = az;
         imu_diag_est_x = rMat.m[2][0];
         imu_diag_est_z = rMat.m[2][2];
+        imu_diag_err_roll = ex;  // roll-plane counterpart (2026-07-18, phi-observability campaign)
+        imu_diag_acc_y = ay;
+        imu_diag_est_y = rMat.m[2][1];
     }
 
     // Compute and apply integral feedback if enabled
@@ -827,6 +833,14 @@ void getQuaternion(quaternion_t *quat)
 }
 
 #ifdef SIMULATOR_BUILD
+// FRAME REFACTOR PHASE B (2026-07-21, campaign 07-20z11): the imuAttitudeOverride
+// Active flag is DELETED. It existed to skip the interim 07-20z8 quat emission
+// correction in --bbl/--synthetic (truth-override) mode, because the Mahony
+// attitude was MIRRORED by the old accel-injection reflection while override
+// content was truth-frame. Phase B put accel + gyro on the one proper rotation
+// Rx(pi), so BF's internal Mahony attitude is now TRUTH-frame in EVERY mode --
+// the quat emission correction (and its override gating) are gone entirely.
+// See docs/reference/frame-contract.md + frame_gate_test.
 void imuSetAttitudeRPY(float roll, float pitch, float yaw)
 {
     IMU_LOCK;

@@ -15,6 +15,7 @@
 
 #include "drivers/dshot.h"
 #include "drivers/motor.h"
+#include "drivers/motor_impl.h"
 
 /* Global referenced by dshot.c, rpm_filter.c, dyn_notch.c, etc. */
 bool useDshotTelemetry = false;
