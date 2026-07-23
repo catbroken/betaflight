@@ -34,7 +34,9 @@
 // Increment when a bug-fix release is made (1 for initial YYYY.MM.X release)
 #define FC_VERSION_PATCH_LEVEL      2
 // Optional suffix for pre-releases (alpha, beta, rc1, etc). Use empty value (not "") for final releases
-#define FC_VERSION_SUFFIX
+// erector/apex: tagged so this custom APEX-enabled build is never mistaken for stock Betaflight
+// (shows up in FC_VERSION_STRING everywhere: CLI `version`, OSD, blackbox header, dashboard, CRSF).
+#define FC_VERSION_SUFFIX "apex"
 
 // Prepend "-" to non-empty suffix
 //  Minimal helper: only tests two cases — empty vs a single string literal
