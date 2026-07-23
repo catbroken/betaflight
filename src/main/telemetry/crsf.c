@@ -52,7 +52,14 @@
 
 #include "flight/gps_rescue.h"
 #include "flight/imu.h"
+#include "flight/mixer.h"
 #include "flight/position.h"
+// APEX snapshot frame accessors (crsfFrameApex)
+#include "drivers/dshot.h"
+#include "drivers/motor.h"
+#include "drivers/time.h"
+#include "sensors/acceleration.h"
+#include "sensors/gyro_init.h"
 
 #include "io/displayport_crsf.h"
 #include "io/gps.h"
@@ -440,6 +447,67 @@ static void crsfFrameAttitude(sbuf_t *dst)
 Payload:
 char[]      Flight mode ( Null terminated string )
 */
+// APEX single-snapshot telemetry: every CA-consumed signal packed in ONE FC
+// call under ONE CRC with a FC timestamp — kills the multi-rate phase skew and
+// makes drops detectable. Little-endian payload (Link overlays a packed LE
+// struct; both ends match by field order + the version byte). Accel is packed
+// RAW (no sign hack); the CA applies its lateral-Y convention negate internally
+// (control_appliance.cpp). Quat is BF's own imuAttitudeQuaternion (== MSP #167),
+// which lets the 2025.12.2 prod FC deliver quat without that MSP message.
+#define CRSF_APEX_FRAME_VERSION 1
+static void crsfFrameApex(sbuf_t *dst)
+{
+    sbufWriteU8(dst, CRSF_FRAME_APEX_PAYLOAD_SIZE + CRSF_FRAME_LENGTH_TYPE_CRC);
+    sbufWriteU8(dst, CRSF_FRAMETYPE_APEX_SNAPSHOT);
+    sbufWriteU8(dst, CRSF_APEX_FRAME_VERSION);
+    sbufWriteU32(dst, micros());
+    for (int i = 0; i < 3; i++) {
+        sbufWriteU16(dst, (uint16_t)gyroRateDps(i));                 // raw MSP LSB (== MSP_RAW_IMU)
+    }
+    for (int i = 0; i < 3; i++) {
+        sbufWriteU16(dst, (uint16_t)lrintf(acc.accADC.v[i]));        // raw ADC 2048 LSB/g (== MSP_RAW_IMU)
+    }
+    sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.w * 32767.0f));   // quat q15 (== MSP #167)
+    sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.x * 32767.0f));
+    sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.y * 32767.0f));
+    sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.z * 32767.0f));
+    sbufWriteU16(dst, (uint16_t)(int16_t)(getEstimatedAltitudeCm() / 10));     // altitude, decimetres
+    sbufWriteU16(dst, (uint16_t)getEstimatedVario());                          // vario, cm/s
+    for (int i = 0; i < 4; i++) {                                              // motor PWM 1000-2000
+        uint16_t pwm = 0;
+#ifdef USE_MOTOR
+        if (motorIsEnabled() && i < getMotorCount() && motorIsMotorEnabled(i)) {
+            pwm = motorConvertToExternal(motor[i]);
+        }
+#endif
+        sbufWriteU16(dst, pwm);
+    }
+    for (int i = 0; i < 4; i++) {                                             // mechanical eRPM
+        uint16_t rpm = 0;
+#ifdef USE_DSHOT_TELEMETRY
+        if (useDshotTelemetry && i < getMotorCount()) {
+            rpm = (uint16_t)constrain(lrintf(getDshotRpm(i)), 0, 65535);
+        }
+#endif
+        sbufWriteU16(dst, rpm);
+    }
+    // flags: bit0 armed, bit1 MSP-override, bit2 PIT mode; high byte = sensor-
+    // present bitmask in the MSP_STATUS_EX layout (ACC<<0|BARO<<1|MAG<<2|GYRO<<5)
+    // so the modem consumes it directly as its _sensors — this frame REPLACES
+    // MSP_STATUS_EX (ALTHOLD is not used by Apex and is intentionally dropped).
+    uint16_t apex_flags = 0;
+    if (ARMING_FLAG(ARMED))                apex_flags |= (1u << 0);
+    if (IS_RC_MODE_ACTIVE(BOXMSPOVERRIDE)) apex_flags |= (1u << 1);
+    if (IS_RC_MODE_ACTIVE(BOXVTXPITMODE))  apex_flags |= (1u << 2);
+    uint16_t sensor_bits = (sensors(SENSOR_ACC)  ? (1u << 0) : 0u)
+                         | (sensors(SENSOR_BARO) ? (1u << 1) : 0u)
+                         | (sensors(SENSOR_MAG)  ? (1u << 2) : 0u)
+                         | (sensors(SENSOR_GYRO) ? (1u << 5) : 0u);
+    apex_flags |= (uint16_t)(sensor_bits << 8);
+    sbufWriteU16(dst, apex_flags);
+    sbufWriteU16(dst, (uint16_t)getBatteryVoltage());                        // vbat, centivolts (0.01 V)
+}
+
 static void crsfFrameFlightMode(sbuf_t *dst)
 {
     // write zero for frame length, since we don't know it yet
@@ -705,6 +773,7 @@ typedef enum {
     CRSF_FRAME_GPS_INDEX,
     CRSF_FRAME_VARIO_SENSOR_INDEX,
     CRSF_FRAME_HEARTBEAT_INDEX,
+    CRSF_FRAME_APEX_INDEX,
     CRSF_SCHEDULE_COUNT_MAX
 } crsfFrameTypeIndex_e;
 
@@ -796,6 +865,11 @@ static void processCrsf(void)
         crsfFinalize(dst);
     }
 #endif
+    if (currentSchedule & BIT(CRSF_FRAME_APEX_INDEX)) {
+        crsfInitializeFrame(dst);
+        crsfFrameApex(dst);
+        crsfFinalize(dst);
+    }
 
     crsfScheduleIndex = (crsfScheduleIndex + 1) % crsfScheduleCount;
 }
@@ -866,13 +940,57 @@ void initCrsfTelemetry(void)
         crsfSchedule[index++] = BIT(CRSF_FRAME_VARIO_SENSOR_INDEX);
     }
 #endif
-
+    // APEX snapshot — the coherent single-frame CA telemetry. Scheduled
+    // UNCONDITIONALLY (not gated on telemetryIsSensorEnabled) at ~20 Hz via 2
+    // slots (each schedule slot fires once per 100 ms cycle). Bounds-guarded so
+    // it can never overflow crsfSchedule[]; if slots run out it degrades to a
+    // lower rate rather than corrupting memory.
+    //
+    // EVEN-SPACING (2026-07-23 fix): the two APEX slots must sit a TRUE
+    // half-cycle apart in the FINAL schedule so the inter-APEX interval is a
+    // clean ~50 ms (= stable 20 Hz). The 2026-07-22 version placed them at the
+    // midpoint of the FILLERS-ONLY array and the CRSF-v3 heartbeat padding was
+    // then appended AFTER — so the real schedule length differed and APEX came
+    // out unevenly spaced (~43/57 ms, one interval below the modem's 45 ms tick
+    // debounce -> dropped -> invariant ~17.5 Hz), and collapsed to two-adjacent
+    // + a heartbeat tail when the fillers were disabled. Fix: assemble the
+    // COMPLETE non-APEX list (fillers + heartbeat padding, padded to an EVEN
+    // count so the halves are equal) FIRST, then interleave the 2 APEX at index
+    // 0 and the true final midpoint. Bounds-guarded; degrades to append-at-end.
+    {
+        uint8_t others[CRSF_SCHEDULE_COUNT_MAX];
+        int nOthers = 0;
+        for (int i = 0; i < index && nOthers < CRSF_SCHEDULE_COUNT_MAX; i++) {
+            others[nOthers++] = crsfSchedule[i];        // the scheduled fillers
+        }
 #if defined(USE_CRSF_V3)
-    while (index < (CRSF_CYCLETIME_US / CRSF_TELEMETRY_FRAME_INTERVAL_MAX_US) && index < CRSF_SCHEDULE_COUNT_MAX) {
-        // schedule heartbeat to ensure that telemetry/heartbeat frames are sent at minimum 50Hz
-        crsfSchedule[index++] = BIT(CRSF_FRAME_HEARTBEAT_INDEX);
-    }
+        // Heartbeat padding: >= (CRSF_CYCLETIME_US / MAX_INTERVAL) - 2 non-APEX
+        // slots for the >=50 Hz heartbeat guarantee, AND an EVEN count so the two
+        // APEX land an exact half-cycle apart (mid == total/2 splits evenly only
+        // when total is even).
+        const int minNonApex = (CRSF_CYCLETIME_US / CRSF_TELEMETRY_FRAME_INTERVAL_MAX_US) - 2;
+        while ((nOthers < minNonApex || (nOthers & 1)) && (nOthers + 2) < CRSF_SCHEDULE_COUNT_MAX) {
+            others[nOthers++] = BIT(CRSF_FRAME_HEARTBEAT_INDEX);
+        }
 #endif
+        if (nOthers + 2 <= CRSF_SCHEDULE_COUNT_MAX) {
+            const int total = nOthers + 2;
+            const int mid   = total / 2;                // APEX #2 slot -> ~50 ms
+            int k = 0, o = 0;
+            for (int s = 0; s < total; s++) {
+                if (s == 0 || s == mid) {
+                    crsfSchedule[k++] = BIT(CRSF_FRAME_APEX_INDEX);
+                } else {
+                    crsfSchedule[k++] = others[o++];
+                }
+            }
+            index = k;
+        } else {
+            for (int a = 0; a < 2 && index < CRSF_SCHEDULE_COUNT_MAX; a++) {
+                crsfSchedule[index++] = BIT(CRSF_FRAME_APEX_INDEX);
+            }
+        }
+    }
 
     crsfScheduleCount = (uint8_t)index;
 
@@ -959,7 +1077,10 @@ void handleCrsfTelemetry(timeUs_t currentTimeUs)
 #if defined(USE_MSP_OVER_TELEMETRY)
     if (mspReplyPending) {
         mspReplyPending = handleCrsfMspFrameBuffer(&crsfSendMspResponse);
-        crsfLastCycleTime = currentTimeUs; // reset telemetry timing due to ad-hoc request
+        // NB: do NOT reset crsfLastCycleTime here. The modem sends ~8 ad-hoc MSP
+        // frames/s; re-phasing the schedule to "now" on each dropped a scheduled
+        // slot -> APEX 20 -> 17.5 Hz. Leaving the phase lets the catch-up loop
+        // below recover this tick. (2026-07-23; repo memory apex_telem_rate_adhoc_msp)
         return;
     }
 #endif
@@ -971,8 +1092,7 @@ void handleCrsfTelemetry(timeUs_t currentTimeUs)
         crsfFrameDeviceInfo(dst);
         crsfFinalize(dst);
         deviceInfoReplyPending = false;
-        crsfLastCycleTime = currentTimeUs; // reset telemetry timing due to ad-hoc request
-        return;
+        return; // no schedule-phase reset (see mspReplyPending note)
     }
 
 #if defined(USE_CRSF_CMS_TELEMETRY)
@@ -983,8 +1103,7 @@ void handleCrsfTelemetry(timeUs_t currentTimeUs)
         crsfInitializeFrame(dst);
         crsfFrameDisplayPortClear(dst);
         crsfFinalize(dst);
-        crsfLastCycleTime = currentTimeUs;
-        return;
+        return; // no schedule-phase reset (see mspReplyPending note)
     }
 
     if (crsfDisplayPortIsReady()) {
@@ -1016,18 +1135,44 @@ void handleCrsfTelemetry(timeUs_t currentTimeUs)
             batchIndex++;
             batchLastTimeUs = currentTimeUs;
 
-            crsfLastCycleTime = currentTimeUs;
-
-            return;
+            return; // no schedule-phase reset (see mspReplyPending note)
         }
     }
 #endif
 
     // Actual telemetry data only needs to be sent at a low frequency, ie 10Hz
     // Spread out scheduled frames evenly so each frame is sent at the same frequency.
-    if (currentTimeUs >= crsfLastCycleTime + (CRSF_CYCLETIME_US / crsfScheduleCount)) {
-        crsfLastCycleTime = currentTimeUs;
+    //
+    // ADVANCE-BY-PERIOD (2026-07-22, APEX rate fix): resetting crsfLastCycleTime
+    // to currentTimeUs dropped the per-slot scheduling overshoot on every fire
+    // (this LOW-priority 500 Hz task is called ~1-2 ms late + preemption jitter).
+    // Because one APEX frame spans scheduleCount/2 slots, that overshoot
+    // ACCUMULATED into its period — nominal 20 Hz measured ~17.5 Hz / jitter
+    // std ~14 ms on the real FC (v22 --telem-flow). Advancing by the fixed
+    // interval keeps the long-run cadence locked to nominal; a bounded resync
+    // (fell >1 period behind, e.g. cold start with crsfLastCycleTime==0, or a
+    // long preemption/ad-hoc-frame stall) snaps forward instead of bursting
+    // catch-up frames that would overwhelm the single shared CRSF responseBuffer.
+    const uint32_t crsfInterval = CRSF_CYCLETIME_US / crsfScheduleCount;
+    // CATCH-UP (2026-07-23): fire processCrsf for EVERY interval that has elapsed,
+    // not just one per entry. The one-shot advance-by-period DROPPED a whole
+    // schedule slot whenever the low-priority telemetry task was entered >1
+    // interval after a mark, so the schedule clock ran ~12% behind real time
+    // (run-proven: processCrsf 53/s vs 60/s for a 6-slot 100 ms cycle -> APEX
+    // 17 vs 20 Hz, with the task entered 461/s so NOT starvation, 0 early-returns).
+    // Draining between builds keeps processCrsf's buffer guard clear; the burst is
+    // bounded and a resync catches a pathological (>4-interval) stall.
+    uint8_t crsfCatchup = 4;
+    while (currentTimeUs >= crsfLastCycleTime + crsfInterval) {
+        crsfLastCycleTime += crsfInterval;
+        crsfRxSendTelemetryData();   // drain the previous frame before building the next
         processCrsf();
+        if (--crsfCatchup == 0) {
+            if (currentTimeUs >= crsfLastCycleTime + crsfInterval) {
+                crsfLastCycleTime = currentTimeUs;  // >4 intervals behind → resync (rare)
+            }
+            break;
+        }
     }
 }
 

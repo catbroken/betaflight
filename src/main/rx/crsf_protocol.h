@@ -66,6 +66,14 @@ typedef enum {
     CRSF_FRAMETYPE_MSP_RESP = 0x7B,  // reply with 58 byte chunked binary
     CRSF_FRAMETYPE_MSP_WRITE = 0x7C,  // write with 8 byte chunked binary (OpenTX outbound telemetry buffer limit)
     CRSF_FRAMETYPE_DISPLAYPORT_CMD = 0x7D, // displayport control command
+    // APEX: custom single-snapshot telemetry frame — every CA-consumed signal
+    // (imu/quat/alt/vario/motor/erpm/flags) in one CRC + one FC timestamp.
+    // 0xB3 is in SineLink's own custom frame-type block (next to SINE_CMD
+    // 0xB1/0xB2, link/radio/packet_crsf.h): unused, OUTSIDE the 0x28-0x96
+    // extended-header range and every stock/ecosystem CRSF type (incl.
+    // ArduPilot's 0x80 custom-telem) — zero collision, unmistakably ours.
+    // See docs/apex-telemetry-single-crsf-frame.txt.
+    CRSF_FRAMETYPE_APEX_SNAPSHOT = 0xB3,
 } crsfFrameType_e;
 
 enum {
@@ -105,6 +113,9 @@ enum {
     CRSF_FRAME_LINK_STATISTICS_TX_PAYLOAD_SIZE = 6,
     CRSF_FRAME_RC_CHANNELS_PAYLOAD_SIZE = 22, // 11 bits per channel * 16 channels = 22 bytes.
     CRSF_FRAME_ATTITUDE_PAYLOAD_SIZE = 6,
+    // version(1)+sample_micros(4)+gyro(6)+accel(6)+quat(8)+alt(2)+vario(2)
+    // +motor_pwm(8)+erpm(8)+flags(2)+vbat(2) = 49
+    CRSF_FRAME_APEX_PAYLOAD_SIZE = 49,
     CRSF_FRAME_DEVICE_PING_PAYLOAD_SIZE = 2,
 };
 
