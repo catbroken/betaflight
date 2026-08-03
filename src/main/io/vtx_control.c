@@ -54,7 +54,10 @@ PG_RESET_TEMPLATE(vtxConfig_t, vtxConfig,
     .halfDuplex = true
 );
 
+#ifdef MB_VTX
+#else
 static uint8_t locked = 0;
+#endif
 
 void vtxControlInit(void)
 {
@@ -72,11 +75,15 @@ void vtxControlInputPoll(void)
 
 static void vtxUpdateBandAndChannel(uint8_t bandStep, uint8_t channelStep)
 {
+#ifdef MB_VTX
+    if (vtxCommonDevice()) {
+#else
     if (ARMING_FLAG(ARMED)) {
         locked = 1;
     }
 
     if (!locked && vtxCommonDevice()) {
+#endif
         vtxSettingsConfigMutable()->band += bandStep;
         vtxSettingsConfigMutable()->channel += channelStep;
     }
@@ -104,9 +111,13 @@ void vtxDecrementChannel(void)
 
 void vtxUpdateActivatedChannel(void)
 {
+#ifdef MB_VTX
+
+#else
     if (ARMING_FLAG(ARMED)) {
         locked = 1;
     }
+#endif
 
     if (vtxCommonDevice()) {
         static uint8_t lastIndex = -1;
@@ -117,8 +128,11 @@ void vtxUpdateActivatedChannel(void)
             if (isRangeActive(vtxChannelActivationCondition->auxChannelIndex, &vtxChannelActivationCondition->range)
                 && index != lastIndex) {
                 lastIndex = index;
-
+#ifdef MB_VTX
+                {
+#else
                 if (!locked) {
+#endif
                     if (vtxChannelActivationCondition->band > 0) {
                         vtxSettingsConfigMutable()->band = vtxChannelActivationCondition->band;
                     }
@@ -130,7 +144,9 @@ void vtxUpdateActivatedChannel(void)
                 if (vtxChannelActivationCondition->power > 0) {
                     vtxSettingsConfigMutable()->power = vtxChannelActivationCondition->power;
                 }
+#ifndef MB_VTX
                 break;
+#endif
             }
         }
     }

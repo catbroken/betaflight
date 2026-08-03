@@ -139,7 +139,11 @@ STATIC_UNIT_TESTED vtxSettingsConfig_t vtxGetSettings(void)
 
 static bool vtxProcessBandAndChannel(vtxDevice_t *vtxDevice)
 {
+#ifdef MB_VTX
+    {
+#else
     if (!ARMING_FLAG(ARMED)) {
+#endif
         uint8_t vtxBand;
         uint8_t vtxChan;
         if (vtxCommonGetBandAndChannel(vtxDevice, &vtxBand, &vtxChan)) {
@@ -156,7 +160,11 @@ static bool vtxProcessBandAndChannel(vtxDevice_t *vtxDevice)
 #if defined(VTX_SETTINGS_FREQCMD)
 static bool vtxProcessFrequency(vtxDevice_t *vtxDevice)
 {
+#ifdef MB_VTX
+    {
+#else
     if (!ARMING_FLAG(ARMED)) {
+#endif
         uint16_t vtxFreq;
         if (vtxCommonGetFrequency(vtxDevice, &vtxFreq)) {
             const vtxSettingsConfig_t settings = vtxGetSettings();
@@ -188,7 +196,12 @@ static bool vtxProcessPitMode(vtxDevice_t *vtxDevice)
     static bool prevPmSwitchState = false;
 
     unsigned vtxStatus;
+#ifdef MB_VTX
+    if (vtxCommonGetStatus(vtxDevice, &vtxStatus)) {
+#else
     if (!ARMING_FLAG(ARMED) && vtxCommonGetStatus(vtxDevice, &vtxStatus)) {
+#endif
+
         bool currPmSwitchState = IS_RC_MODE_ACTIVE(BOXVTXPITMODE);
 
         if (currPmSwitchState != prevPmSwitchState) {
@@ -277,7 +290,11 @@ void vtxUpdate(timeUs_t currentTimeUs)
             currentSchedule = (currentSchedule + 1) % VTX_PARAM_COUNT;
         } while (!vtxUpdatePending && currentSchedule != startingSchedule);
 
+#ifdef MB_VTX
+        {
+#else
         if (!ARMING_FLAG(ARMED) || vtxUpdatePending) {
+#endif
             vtxCommonProcess(vtxDevice, currentTimeUs);
         }
     }

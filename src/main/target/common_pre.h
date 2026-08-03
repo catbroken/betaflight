@@ -20,6 +20,11 @@
 
 #pragma once
 
+// MILBETA defines
+// MB_VTX: allow VTX band/channel/frequency/pit-mode to be changed while ARMED
+// (stock Betaflight locks VTX configuration once armed).
+#define MB_VTX
+
 /*
 
     The purpose of this file is to enable the firmware "gates" for features and drivers
