@@ -471,7 +471,11 @@ static void crsfFrameApex(sbuf_t *dst)
     sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.x * 32767.0f));
     sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.y * 32767.0f));
     sbufWriteU16(dst, (uint16_t)lrintf(imuAttitudeQuaternion.z * 32767.0f));
-    sbufWriteU16(dst, (uint16_t)(int16_t)(getEstimatedAltitudeCm() / 10));     // altitude, decimetres
+    // getAltitudeCm(), NOT getEstimatedAltitudeCm(): the latter is the OSD DISPLAY
+    // value, which position.c sets to absolute GPS MSL while DISARMED and to the
+    // arm-relative value once ARMED. The CA latches its takeoff reference from this
+    // field, so that datum step (= launch elevation) can be latched at the arm edge.
+    sbufWriteU16(dst, (uint16_t)(int16_t)lrintf(getAltitudeCm() / 10.0f));     // altitude, decimetres
     sbufWriteU16(dst, (uint16_t)getEstimatedVario());                          // vario, cm/s
     for (int i = 0; i < 4; i++) {                                              // motor PWM 1000-2000
         uint16_t pwm = 0;
